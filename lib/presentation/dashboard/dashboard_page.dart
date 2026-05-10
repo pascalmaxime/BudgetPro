@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/transaction.dart';
 import '../../features/budget/budget_provider.dart';
 import '../shared/budget_card.dart';
+import '../shared/budget_health_card.dart';
 import '../shared/currency_text.dart';
 import '../shared/mois_selector.dart';
 import 'add_transaction_sheet.dart';
@@ -18,96 +20,133 @@ class DashboardPage extends ConsumerWidget {
     final transAsync = ref.watch(transactionsMoisProvider(mois));
 
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(
-            title: const Text('Dashboard'),
+          SliverAppBar(
+            title: const Text('Dashboard',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22)),
+            centerTitle: true,
+            floating: true,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
+              preferredSize: const Size.fromHeight(40),
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: const MoisSelector(),
               ),
             ),
           ),
+
+          // Health card
           SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverGrid.count(
-              crossAxisCount: 2,
-              childAspectRatio: 1.6,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: [
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: BudgetHealthCard(
+                revenus: resume.totalRevenus,
+                depenses: resume.totalDepenses,
+                epargne: resume.totalEpargne,
+              ),
+            ),
+          ),
+
+          // Metrics grid
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 320,
+                mainAxisExtent: 96,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              delegate: SliverChildListDelegate([
                 BudgetCard(
                   label: 'Revenus',
                   montant: resume.totalRevenus,
-                  icon: Icons.trending_up,
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  icon: Icons.trending_up_rounded,
+                  accentColor: AppColors.revenue,
+                  subtitle: 'Ce mois-ci',
                 ),
                 BudgetCard(
                   label: 'Dépenses',
                   montant: resume.totalDepenses,
-                  icon: Icons.trending_down,
-                  color: Theme.of(context).colorScheme.errorContainer,
+                  icon: Icons.trending_down_rounded,
+                  accentColor: AppColors.expense,
+                  subtitle: 'Fixes + variables',
                 ),
                 BudgetCard(
                   label: 'Épargne',
                   montant: resume.totalEpargne,
-                  icon: Icons.savings,
-                  color: Theme.of(context).colorScheme.tertiaryContainer,
+                  icon: Icons.savings_rounded,
+                  accentColor: AppColors.savings,
+                  subtitle: 'Mise de côté',
                 ),
                 BudgetCard(
                   label: 'Solde restant',
                   montant: resume.solde,
-                  icon: Icons.account_balance_wallet,
+                  icon: Icons.account_balance_wallet_rounded,
+                  accentColor: AppColors.balance,
                   showSign: true,
                 ),
-              ],
+              ]),
             ),
           ),
+
+          // Transactions header
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
             sliver: SliverToBoxAdapter(
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Transactions',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  Row(
-                    children: [
-                      _AddButton(type: TransactionType.revenu, label: 'Revenu', icon: Icons.add_circle_outline),
-                      const SizedBox(width: 8),
-                      _AddButton(type: TransactionType.depenseVariable, label: 'Dépense', icon: Icons.remove_circle_outline),
-                      const SizedBox(width: 8),
-                      _AddButton(type: TransactionType.epargne, label: 'Épargne', icon: Icons.savings_outlined),
-                    ],
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          )),
+                  const Spacer(),
+                  _QuickAddButton(
+                    label: 'Revenu',
+                    icon: Icons.add_rounded,
+                    color: AppColors.revenue,
+                    type: TransactionType.revenu,
+                  ),
+                  const SizedBox(width: 8),
+                  _QuickAddButton(
+                    label: 'Dépense',
+                    icon: Icons.remove_rounded,
+                    color: AppColors.expense,
+                    type: TransactionType.depenseVariable,
+                  ),
+                  const SizedBox(width: 8),
+                  _QuickAddButton(
+                    label: 'Épargne',
+                    icon: Icons.savings_outlined,
+                    color: AppColors.savings,
+                    type: TransactionType.epargne,
                   ),
                 ],
               ),
             ),
           ),
-          const SliverPadding(padding: EdgeInsets.only(top: 8)),
+
+          const SliverPadding(padding: EdgeInsets.only(top: 10)),
+
+          // Transaction list
           transAsync.when(
             loading: () => const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => SliverFillRemaining(child: Center(child: Text('Erreur : $e'))),
+                child: Center(child: CircularProgressIndicator())),
+            error: (e, _) =>
+                SliverFillRemaining(child: Center(child: Text('Erreur : $e'))),
             data: (transactions) => transactions.isEmpty
-                ? const SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text('Aucune transaction ce mois-ci', style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                    ),
-                  )
+                ? SliverToBoxAdapter(child: _EmptyTransactions())
                 : SliverList.builder(
-                    itemCount: transactions.length,
-                    itemBuilder: (context, i) => _TransactionTile(transaction: transactions[i]),
+                    itemCount: transactions.length + 1,
+                    itemBuilder: (context, i) {
+                      if (i == transactions.length) {
+                        return const SizedBox(height: 24);
+                      }
+                      return _TransactionTile(transaction: transactions[i]);
+                    },
                   ),
           ),
         ],
@@ -116,24 +155,74 @@ class DashboardPage extends ConsumerWidget {
   }
 }
 
-class _AddButton extends StatelessWidget {
-  final TransactionType type;
+class _QuickAddButton extends StatelessWidget {
   final String label;
   final IconData icon;
+  final Color color;
+  final TransactionType type;
 
-  const _AddButton({required this.type, required this.label, required this.icon});
+  const _QuickAddButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.type,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: 'Ajouter $label',
-      child: IconButton.filledTonal(
-        icon: Icon(icon, size: 20),
-        onPressed: () => showModalBottomSheet(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => showModalBottomSheet(
           context: context,
           isScrollControlled: true,
+          useSafeArea: true,
           builder: (_) => AddTransactionSheet(type: type),
         ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12, color: color, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyTransactions extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.receipt_long_outlined, size: 48, color: cs.outline.withValues(alpha: 0.4)),
+          const SizedBox(height: 10),
+          Text('Aucune transaction ce mois-ci',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.outline)),
+          const SizedBox(height: 4),
+          Text('Ajoutez vos revenus et dépenses ci-dessus',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: cs.outline.withValues(alpha: 0.6),
+                  )),
+        ],
       ),
     );
   }
@@ -143,65 +232,107 @@ class _TransactionTile extends ConsumerWidget {
   final Transaction transaction;
   const _TransactionTile({required this.transaction});
 
+  Color _typeColor(TransactionType type) => switch (type) {
+        TransactionType.revenu => AppColors.revenue,
+        TransactionType.epargne => AppColors.savings,
+        TransactionType.depenseFixe => AppColors.expense,
+        TransactionType.depenseVariable => AppColors.expense,
+      };
+
+  IconData _typeIcon(TransactionType type) => switch (type) {
+        TransactionType.revenu => Icons.arrow_downward_rounded,
+        TransactionType.epargne => Icons.savings_rounded,
+        TransactionType.depenseFixe => Icons.repeat_rounded,
+        TransactionType.depenseVariable => Icons.arrow_upward_rounded,
+      };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final color = _typeColor(transaction.type);
     final isRevenu = transaction.type == TransactionType.revenu;
-    final isEpargne = transaction.type == TransactionType.epargne;
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: isRevenu
-            ? cs.primaryContainer
-            : isEpargne
-                ? cs.tertiaryContainer
-                : cs.errorContainer,
-        child: Icon(
-          isRevenu
-              ? Icons.trending_up
-              : isEpargne
-                  ? Icons.savings
-                  : Icons.shopping_bag_outlined,
-          size: 20,
-          color: isRevenu
-              ? cs.onPrimaryContainer
-              : isEpargne
-                  ? cs.onTertiaryContainer
-                  : cs.onErrorContainer,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      child: Material(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? cs.surfaceContainerHigh
+            : cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onLongPress: () => _confirmDelete(context, ref),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(_typeIcon(transaction.type), size: 20, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(transaction.description,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${transaction.categorie.label} · ${DateFormat('dd MMM', 'fr_FR').format(transaction.date)}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: cs.onSurface.withValues(alpha: 0.5),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${isRevenu ? '+' : '-'}${formatCurrency(transaction.montant)}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: isRevenu ? AppColors.revenue : AppColors.expense,
+                      ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      title: Text(transaction.description),
-      subtitle: Text(
-          '${transaction.categorie.label} · ${DateFormat('dd/MM').format(transaction.date)}'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CurrencyText(
-            transaction.montant,
-            showSign: isRevenu,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('Supprimer ?'),
-                  content: Text('Supprimer "${transaction.description}" ?'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
-                  ],
-                ),
-              );
-              if (confirm == true) {
-                ref.read(transactionsMoisProvider(transaction.mois).notifier).supprimer(transaction.id);
-              }
-            },
-          ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Supprimer ?'),
+        content: Text('Supprimer "${transaction.description}" ?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Supprimer')),
         ],
       ),
     );
+    if (confirm == true) {
+      ref
+          .read(transactionsMoisProvider(transaction.mois).notifier)
+          .supprimer(transaction.id);
+    }
   }
 }

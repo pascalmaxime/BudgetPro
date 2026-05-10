@@ -5,46 +5,77 @@ class BudgetCard extends StatelessWidget {
   final String label;
   final double montant;
   final IconData icon;
-  final Color? color;
+  final Color accentColor;
   final bool showSign;
+  final String? subtitle;
 
   const BudgetCard({
     super.key,
     required this.label,
     required this.montant,
     required this.icon,
-    this.color,
+    required this.accentColor,
     this.showSign = false,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final cardColor = color ?? cs.primaryContainer;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
-      color: cardColor,
+      color: isDark ? cs.surfaceContainerHigh : cs.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.7)),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(color: cs.onSurface.withValues(alpha: 0.7))),
-              ],
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: accentColor, size: 22),
             ),
-            const SizedBox(height: 8),
-            CurrencyText(
-              montant,
-              showSign: showSign,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: cs.onSurface.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  CurrencyText(
+                    montant,
+                    showSign: showSign,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: showSign
+                              ? (montant >= 0 ? accentColor : const Color(0xFFE53E3E))
+                              : cs.onSurface,
+                        ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: cs.onSurface.withValues(alpha: 0.45),
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
             ),
           ],
         ),
