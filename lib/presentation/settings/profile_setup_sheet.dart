@@ -74,14 +74,14 @@ class _ProfileSetupSheetState extends ConsumerState<ProfileSetupSheet> {
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               DropdownButtonFormField<ContratType>(
-                value: _contrat,
+                initialValue: _contrat,
                 decoration: const InputDecoration(labelText: 'Situation professionnelle', border: OutlineInputBorder()),
                 items: ContratType.values.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
                 onChanged: (v) => setState(() => _contrat = v!),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<LogementType>(
-                value: _logement,
+                initialValue: _logement,
                 decoration: const InputDecoration(labelText: 'Situation logement', border: OutlineInputBorder()),
                 items: LogementType.values.map((l) => DropdownMenuItem(value: l, child: Text(l.label))).toList(),
                 onChanged: (v) => setState(() => _logement = v!),

@@ -23,8 +23,9 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -65,5 +66,32 @@ class DatabaseHelper {
     ''');
 
     await db.execute('CREATE INDEX idx_transactions_mois ON transactions(mois)');
+    await _createComptes(db);
+  }
+
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) await _createComptes(db);
+  }
+
+  static Future<void> _createComptes(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS comptes (
+        id TEXT PRIMARY KEY,
+        nom TEXT NOT NULL,
+        type TEXT NOT NULL,
+        solde REAL NOT NULL DEFAULT 0,
+        banque TEXT,
+        date_ouverture TEXT
+      )
+    ''');
+  }
+
+  /// Supprime toutes les données utilisateur (garde la structure des tables).
+  static Future<void> resetAll() async {
+    final db = await database;
+    await db.delete('transactions');
+    await db.delete('abonnements');
+    await db.delete('comptes');
+    await db.delete('user_profile');
   }
 }

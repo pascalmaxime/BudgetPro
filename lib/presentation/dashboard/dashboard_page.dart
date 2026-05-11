@@ -246,26 +246,40 @@ class _TransactionTile extends ConsumerWidget {
         TransactionType.depenseVariable => Icons.arrow_upward_rounded,
       };
 
+  void _openEdit(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => AddTransactionSheet(
+        type: transaction.type,
+        transaction: transaction,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = _typeColor(transaction.type);
-    final isRevenu = transaction.type == TransactionType.revenu;
+    final isRevenu = transaction.type == TransactionType.revenu ||
+        transaction.type == TransactionType.epargne;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: Material(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? cs.surfaceContainerHigh
-            : cs.surface,
+        color: isDark ? cs.surfaceContainerHigh : cs.surface,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onLongPress: () => _confirmDelete(context, ref),
+          onTap: () => _openEdit(context),
+          onLongPress: () => _showOptions(context, ref),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
             child: Row(
               children: [
+                // Icône type
                 Container(
                   width: 42,
                   height: 42,
@@ -276,17 +290,21 @@ class _TransactionTile extends ConsumerWidget {
                   child: Icon(_typeIcon(transaction.type), size: 20, color: color),
                 ),
                 const SizedBox(width: 12),
+
+                // Description + catégorie · date
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(transaction.description,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        transaction.description,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '${transaction.categorie.label} · ${DateFormat('dd MMM', 'fr_FR').format(transaction.date)}',
@@ -297,6 +315,8 @@ class _TransactionTile extends ConsumerWidget {
                     ],
                   ),
                 ),
+
+                // Montant
                 const SizedBox(width: 8),
                 Text(
                   '${isRevenu ? '+' : '-'}${formatCurrency(transaction.montant)}',
@@ -304,6 +324,16 @@ class _TransactionTile extends ConsumerWidget {
                         fontWeight: FontWeight.w700,
                         color: isRevenu ? AppColors.revenue : AppColors.expense,
                       ),
+                ),
+
+                // Bouton modifier
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(Icons.edit_outlined,
+                      size: 18, color: cs.onSurface.withValues(alpha: 0.35)),
+                  tooltip: 'Modifier',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _openEdit(context),
                 ),
               ],
             ),
@@ -313,23 +343,32 @@ class _TransactionTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
+  Future<void> _showOptions(BuildContext context, WidgetRef ref) async {
+    final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Supprimer ?'),
-        content: Text('Supprimer "${transaction.description}" ?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Annuler')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Supprimer')),
-        ],
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Modifier'),
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Supprimer',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
       ),
     );
-    if (confirm == true) {
+    if (!context.mounted) return;
+    if (action == 'edit') {
+      _openEdit(context);
+    } else if (action == 'delete') {
       ref
           .read(transactionsMoisProvider(transaction.mois).notifier)
           .supprimer(transaction.id);

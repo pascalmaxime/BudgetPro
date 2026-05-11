@@ -14,9 +14,10 @@ class ShellPage extends StatefulWidget {
 class _ShellPageState extends State<ShellPage> {
   static const _tabs = [
     (path: '/dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard'),
+    (path: '/comptes', icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: 'Comptes'),
     (path: '/abonnements', icon: Icons.subscriptions_outlined, selectedIcon: Icons.subscriptions, label: 'Abonnements'),
     (path: '/historique', icon: Icons.history_outlined, selectedIcon: Icons.history, label: 'Historique'),
-    (path: '/ia', icon: Icons.psychology_outlined, selectedIcon: Icons.psychology, label: 'Conseiller IA'),
+    (path: '/ia', icon: Icons.psychology_outlined, selectedIcon: Icons.psychology, label: 'Conseiller'),
     (path: '/settings', icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Paramètres'),
   ];
 

@@ -7,7 +7,13 @@ import '../../features/budget/budget_provider.dart';
 
 class AddTransactionSheet extends ConsumerStatefulWidget {
   final TransactionType type;
-  const AddTransactionSheet({super.key, required this.type});
+  final Transaction? transaction; // non-null = mode édition
+
+  const AddTransactionSheet({
+    super.key,
+    required this.type,
+    this.transaction,
+  });
 
   @override
   ConsumerState<AddTransactionSheet> createState() => _AddTransactionSheetState();
@@ -17,17 +23,31 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   final _formKey = GlobalKey<FormState>();
   final _descCtrl = TextEditingController();
   final _montantCtrl = TextEditingController();
-  CategorieTransaction _categorie = CategorieTransaction.autre;
-  DateTime _date = DateTime.now();
+  late CategorieTransaction _categorie;
+  late DateTime _date;
+  late TransactionType _type;
+
+  bool get _isEdit => widget.transaction != null;
 
   @override
   void initState() {
     super.initState();
-    _categorie = switch (widget.type) {
-      TransactionType.revenu => CategorieTransaction.salaire,
-      TransactionType.epargne => CategorieTransaction.epargne,
-      _ => CategorieTransaction.autre,
-    };
+    if (_isEdit) {
+      final t = widget.transaction!;
+      _descCtrl.text = t.description;
+      _montantCtrl.text = t.montant.toString();
+      _categorie = t.categorie;
+      _date = t.date;
+      _type = t.type;
+    } else {
+      _type = widget.type;
+      _date = DateTime.now();
+      _categorie = switch (widget.type) {
+        TransactionType.revenu => CategorieTransaction.salaire,
+        TransactionType.epargne => CategorieTransaction.epargne,
+        _ => CategorieTransaction.autre,
+      };
+    }
   }
 
   @override
@@ -37,7 +57,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     super.dispose();
   }
 
-  List<CategorieTransaction> get _categories => switch (widget.type) {
+  List<CategorieTransaction> get _categories => switch (_type) {
         TransactionType.revenu => [
             CategorieTransaction.salaire,
             CategorieTransaction.apl,
@@ -65,69 +85,149 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final mois = ref.read(moisSelectionneProvider);
+    final mois = _isEdit
+        ? widget.transaction!.mois
+        : ref.read(moisSelectionneProvider);
+
     final t = Transaction(
-      id: const Uuid().v4(),
+      id: widget.transaction?.id ?? const Uuid().v4(),
       mois: mois,
       montant: double.parse(_montantCtrl.text.replaceAll(',', '.')),
       description: _descCtrl.text.trim(),
       categorie: _categorie,
       date: _date,
-      type: widget.type,
+      type: _type,
     );
-    ref.read(transactionsMoisProvider(mois).notifier).ajouter(t);
+
+    final notifier = ref.read(transactionsMoisProvider(mois).notifier);
+    if (_isEdit) {
+      notifier.modifier(t);
+    } else {
+      notifier.ajouter(t);
+    }
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final typeLabel = widget.type.label;
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
-        left: 24, right: 24, top: 24,
+        left: 24,
+        right: 24,
+        top: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: Form(
         key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Ajouter — $typeLabel',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            TextFormField(
-              controller: _descCtrl,
-              decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Requis' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _montantCtrl,
-              decoration: const InputDecoration(labelText: 'Montant (€)', border: OutlineInputBorder(), suffixText: '€'),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Requis';
-                if (double.tryParse(v.replaceAll(',', '.')) == null) return 'Montant invalide';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<CategorieTransaction>(
-              value: _categorie,
-              decoration: const InputDecoration(labelText: 'Catégorie', border: OutlineInputBorder()),
-              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
-              onChanged: (v) => setState(() => _categorie = v!),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _pickDate,
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text('Date : ${DateFormat('dd/MM/yyyy').format(_date)}'),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _submit, child: Text('Ajouter $typeLabel')),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Titre + sélecteur de type
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isEdit ? 'Modifier la transaction' : 'Ajouter — ${_type.label}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (_isEdit) ...[
+                    // Sélecteur de type en mode édition
+                    DropdownButton<TransactionType>(
+                      value: _type,
+                      underline: const SizedBox(),
+                      borderRadius: BorderRadius.circular(12),
+                      items: TransactionType.values
+                          .map((t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t.label,
+                                    style: TextStyle(
+                                        fontSize: 13, color: cs.primary)),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _type = v;
+                            // Réinitialiser la catégorie si elle n'existe plus
+                            if (!_categories.contains(_categorie)) {
+                              _categorie = _categories.first;
+                            }
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Description
+              TextFormField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'Description', border: OutlineInputBorder()),
+                textCapitalization: TextCapitalization.sentences,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Requis' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Montant
+              TextFormField(
+                controller: _montantCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'Montant (€)',
+                    border: OutlineInputBorder(),
+                    suffixText: '€'),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Requis';
+                  if (double.tryParse(v.replaceAll(',', '.')) == null) {
+                    return 'Montant invalide';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Catégorie
+              DropdownButtonFormField<CategorieTransaction>(
+                initialValue: _categories.contains(_categorie)
+                    ? _categorie
+                    : _categories.first,
+                decoration: const InputDecoration(
+                    labelText: 'Catégorie', border: OutlineInputBorder()),
+                items: _categories
+                    .map((c) =>
+                        DropdownMenuItem(value: c, child: Text(c.label)))
+                    .toList(),
+                onChanged: (v) => setState(() => _categorie = v!),
+              ),
+              const SizedBox(height: 12),
+
+              // Date
+              OutlinedButton.icon(
+                onPressed: _pickDate,
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                    'Date : ${DateFormat('dd/MM/yyyy').format(_date)}'),
+              ),
+              const SizedBox(height: 20),
+
+              FilledButton(
+                onPressed: _submit,
+                child: Text(_isEdit ? 'Enregistrer les modifications' : 'Ajouter ${_type.label}'),
+              ),
+            ],
+          ),
         ),
       ),
     );

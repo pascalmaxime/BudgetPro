@@ -113,14 +113,14 @@ class _AddAbonnementSheetState extends ConsumerState<AddAbonnementSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<FrequenceType>(
-              value: _frequence,
+              initialValue: _frequence,
               decoration: const InputDecoration(labelText: 'Fréquence', border: OutlineInputBorder()),
               items: FrequenceType.values.map((f) => DropdownMenuItem(value: f, child: Text(f.label))).toList(),
               onChanged: (v) => setState(() => _frequence = v!),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<CategorieAbonnement>(
-              value: _categorie,
+              initialValue: _categorie,
               decoration: const InputDecoration(labelText: 'Catégorie', border: OutlineInputBorder()),
               items: CategorieAbonnement.values.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
               onChanged: (v) => setState(() => _categorie = v!),
