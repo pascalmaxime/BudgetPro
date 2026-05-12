@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../data/repositories/profile_repository.dart';
 import '../../data/repositories/transactions_repository.dart';
+import '../../data/services/recurring_service.dart';
 import '../../domain/entities/transaction.dart';
 
 final transactionsRepositoryProvider = Provider((_) => TransactionsRepository());
@@ -17,7 +19,17 @@ class TransactionsMoisNotifier extends FamilyAsyncNotifier<List<Transaction>, St
   TransactionsRepository get _repo => ref.read(transactionsRepositoryProvider);
 
   @override
-  Future<List<Transaction>> build(String arg) => _repo.getByMois(arg);
+  Future<List<Transaction>> build(String arg) async {
+    // Auto-injection des transactions récurrentes pour le mois courant
+    final now = DateFormat('yyyy-MM').format(DateTime.now());
+    if (arg == now) {
+      final profile = await ProfileRepository().get();
+      if (profile != null) {
+        await RecurringService.maybeBootstrap(arg, profile, _repo);
+      }
+    }
+    return _repo.getByMois(arg);
+  }
 
   Future<void> ajouter(Transaction t) async {
     await _repo.insert(t);

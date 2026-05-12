@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -71,6 +71,22 @@ class DatabaseHelper {
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) await _createComptes(db);
+    if (oldVersion < 3) await _addProfileJsonColumns(db);
+    if (oldVersion < 4) await _addPatrimoineGoalColumns(db);
+  }
+
+  static Future<void> _addPatrimoineGoalColumns(Database db) async {
+    await db.execute(
+        'ALTER TABLE user_profile ADD COLUMN objectif_patrimoine REAL NOT NULL DEFAULT 0');
+    await db.execute(
+        'ALTER TABLE user_profile ADD COLUMN date_objectif_patrimoine TEXT');
+  }
+
+  static Future<void> _addProfileJsonColumns(Database db) async {
+    await db.execute(
+        "ALTER TABLE user_profile ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'");
+    await db.execute(
+        "ALTER TABLE user_profile ADD COLUMN charges_fixes_json TEXT NOT NULL DEFAULT '[]'");
   }
 
   static Future<void> _createComptes(Database db) async {

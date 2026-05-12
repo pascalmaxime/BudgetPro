@@ -4,8 +4,9 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/transaction.dart';
 import '../../features/budget/budget_provider.dart';
+import '../../features/profile/profile_provider.dart';
+import '../shared/bilan_card.dart';
 import '../shared/budget_card.dart';
-import '../shared/budget_health_card.dart';
 import '../shared/currency_text.dart';
 import '../shared/mois_selector.dart';
 import 'add_transaction_sheet.dart';
@@ -18,6 +19,7 @@ class DashboardPage extends ConsumerWidget {
     final mois = ref.watch(moisSelectionneProvider);
     final resume = ref.watch(resumeMoisProvider(mois));
     final transAsync = ref.watch(transactionsMoisProvider(mois));
+    final profile = ref.watch(profileProvider).value;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -38,14 +40,17 @@ class DashboardPage extends ConsumerWidget {
             ),
           ),
 
-          // Health card
+          // Bilan mensuel P&L
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             sliver: SliverToBoxAdapter(
-              child: BudgetHealthCard(
+              child: BilanCard(
                 revenus: resume.totalRevenus,
-                depenses: resume.totalDepenses,
+                depensesFixes: resume.totalDepensesFixes,
+                depensesVariables: resume.totalDepensesVariables,
                 epargne: resume.totalEpargne,
+                objectifEpargne: profile?.objectifEpargneEffectif,
+                tauxRecommande: profile?.tauxEpargneRecommande,
               ),
             ),
           ),

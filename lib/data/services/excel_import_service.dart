@@ -7,18 +7,22 @@ import '../../core/database/database_helper.dart';
 import '../../domain/entities/abonnement.dart';
 import '../../domain/entities/compte.dart';
 import '../../domain/entities/transaction.dart';
+import '../../domain/entities/user_profile.dart';
+import '../repositories/profile_repository.dart';
 
 /// Résultat d'un import
 class ImportResult {
   final int transactions;
   final int abonnements;
   final int comptes;
+  final bool profilImporte;
   final List<String> errors;
 
   const ImportResult({
     required this.transactions,
     required this.abonnements,
     required this.comptes,
+    this.profilImporte = false,
     required this.errors,
   });
 
@@ -26,9 +30,15 @@ class ImportResult {
   int get total => transactions + abonnements + comptes;
 
   @override
-  String toString() =>
-      '$transactions transactions, $abonnements abonnements, $comptes comptes importés'
-      '${hasErrors ? ' (${errors.length} erreur(s))' : ''}';
+  String toString() {
+    final parts = <String>[];
+    if (transactions > 0) parts.add('$transactions transactions');
+    if (abonnements > 0) parts.add('$abonnements abonnements');
+    if (comptes > 0) parts.add('$comptes comptes');
+    if (profilImporte) parts.add('profil');
+    final base = parts.isEmpty ? 'Aucune donnée importée' : '${parts.join(', ')} importés';
+    return hasErrors ? '$base (${errors.length} erreur(s))' : base;
+  }
 }
 
 class ExcelImportService {
@@ -104,10 +114,29 @@ class ExcelImportService {
       }
     }
 
+    // ── Profil ──────────────────────────────────────────────────────────────
+    bool profilImporte = false;
+    final profilSheet = excel.sheets['Profil'];
+    if (profilSheet != null) {
+      try {
+        final profile = _parseProfilSheet(profilSheet);
+        if (profile != null) {
+          // Preserve existing id if any
+          final existing = await ProfileRepository().get();
+          final toSave = profile.copyWith(id: existing?.id);
+          await ProfileRepository().save(toSave);
+          profilImporte = true;
+        }
+      } catch (e) {
+        errors.add('Profil: $e');
+      }
+    }
+
     return ImportResult(
       transactions: nbTx,
       abonnements: nbAbo,
       comptes: nbCptes,
+      profilImporte: profilImporte,
       errors: errors,
     );
   }
@@ -273,6 +302,107 @@ class ExcelImportService {
       'autre': CategorieAbonnement.autre,
     };
     return map[s] ?? map[s.toLowerCase()] ?? CategorieAbonnement.autre;
+  }
+
+  // ── Parser profil ────────────────────────────────────────────────────────
+
+  static UserProfile? _parseProfilSheet(Sheet sheet) {
+    final rows = sheet.rows;
+    if (rows.isEmpty) return null;
+
+    // Passe 1 : collecter tous les couples clé/valeur reconnus,
+    // quel que soit leur position (compatible export ET modèle).
+    const knownKeys = {
+      'type_contrat', 'situation_logement', 'loyer_mensuel',
+      'objectif_epargne', 'rappel_jours_avant',
+      'objectif_patrimoine', 'date_objectif_patrimoine',
+    };
+    final kv = <String, String>{};
+    for (var i = 0; i < rows.length; i++) {
+      final key = _str(rows[i], 0);
+      if (knownKeys.contains(key)) {
+        kv[key] = _str(rows[i], 1);
+      }
+    }
+
+    final contratStr = kv['type_contrat'] ?? '';
+    final logementStr = kv['situation_logement'] ?? '';
+    if (contratStr.isEmpty || logementStr.isEmpty) return null;
+
+    final contrat = ContratType.values.firstWhere(
+      (e) => e.name == contratStr,
+      orElse: () => ContratType.cdi,
+    );
+    final logement = LogementType.values.firstWhere(
+      (e) => e.name == logementStr,
+      orElse: () => LogementType.locataire,
+    );
+    final loyer = double.tryParse((kv['loyer_mensuel'] ?? '').replaceAll(',', '.'));
+    final objectif = double.tryParse((kv['objectif_epargne'] ?? '0').replaceAll(',', '.')) ?? 0;
+    final rappel = int.tryParse(kv['rappel_jours_avant'] ?? '3') ?? 3;
+
+    // Objectif patrimoine
+    final patrimoineStr = (kv['objectif_patrimoine'] ?? '').replaceAll(',', '.');
+    final objectifPatrimoine = double.tryParse(patrimoineStr) ?? 0;
+
+    DateTime? dateObjectifPatrimoine;
+    final datePatrimoineStr = kv['date_objectif_patrimoine'] ?? '';
+    if (datePatrimoineStr.isNotEmpty) {
+      try {
+        dateObjectifPatrimoine = _parseDate(datePatrimoineStr);
+      } catch (_) {}
+    }
+
+    // Passe 2 : scanner les sections SOURCES_REVENUS / CHARGES_FIXES
+    // (fonctionne quel que soit le décalage de ligne du marqueur).
+    final sources = <SourceRevenu>[];
+    final charges = <ChargeFixer>[];
+    String? currentSection;
+
+    for (var i = 0; i < rows.length; i++) {
+      final col0 = _str(rows[i], 0);
+      if (col0 == 'SOURCES_REVENUS') {
+        currentSection = 'sources';
+        continue; // ligne suivante = en-têtes
+      }
+      if (col0 == 'CHARGES_FIXES') {
+        currentSection = 'charges';
+        continue;
+      }
+      if (currentSection == null) continue;
+
+      // Sauter les lignes d'en-tête et les lignes vides
+      if (col0 == 'label' || col0 == 'Champ' || col0 == 'jour_du_mois') continue;
+      if (_isEmptyRow(rows[i])) continue;
+
+      final label = col0;
+      final montant =
+          double.tryParse(_str(rows[i], 1).replaceAll(',', '.')) ?? 0;
+      final jour =
+          (int.tryParse(_str(rows[i], 2)) ?? 1).clamp(1, 31);
+      // Ignorer les lignes de commentaire (montant non numérique → 0)
+      if (label.isEmpty || montant <= 0) continue;
+
+      if (currentSection == 'sources') {
+        sources.add(SourceRevenu(
+            id: _uuid.v4(), label: label, montant: montant, jour: jour));
+      } else if (currentSection == 'charges') {
+        charges.add(ChargeFixer(
+            id: _uuid.v4(), label: label, montant: montant, jour: jour));
+      }
+    }
+
+    return UserProfile(
+      typeContrat: contrat,
+      situationLogement: logement,
+      loyerMensuel: loyer,
+      sources: sources,
+      chargesFixes: charges,
+      objectifEpargne: objectif,
+      rappelJoursAvant: rappel,
+      objectifPatrimoine: objectifPatrimoine,
+      dateObjectifPatrimoine: dateObjectifPatrimoine,
+    );
   }
 
   // ── DB upsert ──────────────────────────────────────────────────────────────

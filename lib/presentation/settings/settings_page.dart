@@ -9,6 +9,7 @@ import '../../data/services/excel_template_service.dart';
 import '../../features/abonnements/abonnements_provider.dart';
 import '../../features/budget/budget_provider.dart';
 import '../../features/comptes/comptes_provider.dart';
+import '../../domain/entities/user_profile.dart';
 import '../../features/profile/profile_provider.dart';
 import '../../features/theme/theme_provider.dart';
 import 'profile_setup_sheet.dart';
@@ -47,13 +48,13 @@ class SettingsPage extends ConsumerWidget {
                       ? profile.typeContrat.label
                       : 'Profil non configuré'),
                   subtitle: profile != null
-                      ? Text(
-                          '${profile.situationLogement.label} · Épargne : ${profile.objectifEpargne.toStringAsFixed(0)} €/mois')
+                      ? Text(_profileSubtitle(profile))
                       : const Text('Configurez votre profil pour une analyse personnalisée'),
                   trailing: const Icon(Icons.edit_outlined),
                   onTap: () => showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
+                    useSafeArea: true,
                     builder: (_) => const ProfileSetupSheet(),
                   ),
                 ),
@@ -91,6 +92,19 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _profileSubtitle(UserProfile profile) {
+    final parts = <String>[profile.situationLogement.label];
+    if (profile.sources.isNotEmpty) {
+      final total = profile.revenuMensuelTotal;
+      if (total > 0) parts.add('${total.toStringAsFixed(0)} €/mois');
+    }
+    final obj = profile.objectifEpargneEffectif;
+    if (obj > 0) {
+      parts.add('Obj. épargne : ${obj.toStringAsFixed(0)} €');
+    }
+    return parts.join(' · ');
   }
 }
 

@@ -6,7 +6,15 @@ import '../../domain/entities/transaction.dart';
 import '../../domain/entities/user_profile.dart';
 
 class IaService {
-  static const _endpoint = 'https://api.anthropic.com/v1/messages';
+  // Groq — API compatible OpenAI, gratuit (console.groq.com)
+  static const _endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+
+  static const _systemPrompt =
+      'Tu es un conseiller budgétaire personnel bienveillant et expert. '
+      'Tu analyses les données financières de l\'utilisateur et fournis des conseils '
+      'personnalisés, concrets et actionnables. '
+      'Réponds toujours en français, de manière claire et structurée. '
+      'Sois encourageant même quand la situation est difficile.';
 
   Future<String> analyserBudget({
     required UserProfile profile,
@@ -24,28 +32,38 @@ class IaService {
       Uri.parse(_endpoint),
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': claudeApiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': 'Bearer $groqApiKey',
       },
       body: jsonEncode({
-        'model': claudeModel,
+        'model': groqModel,
         'max_tokens': 1024,
-        'system': '''Tu es un conseiller budgétaire personnel bienveillant et expert.
-Tu analyses les données financières de l'utilisateur et fournis des conseils personnalisés, concrets et actionnables.
-Réponds toujours en français, de manière claire et structurée.
-Sois encourageant même quand la situation est difficile.''',
+        'temperature': 0.7,
         'messages': [
-          {'role': 'user', 'content': prompt}
+          {'role': 'system', 'content': _systemPrompt},
+          {'role': 'user', 'content': prompt},
         ],
       }),
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Erreur API Claude : ${response.statusCode}');
+      String message = 'Erreur API Groq : ${response.statusCode}';
+      try {
+        final err = jsonDecode(utf8.decode(response.bodyBytes));
+        final errMsg = (err['error']?['message'] as String?) ?? '';
+        if (errMsg.contains('invalid_api_key') || errMsg.contains('No API key')) {
+          message = 'Clé API Groq invalide. '
+              'Génère-en une sur console.groq.com et colle-la dans api_keys.dart.';
+        } else if (errMsg.contains('rate_limit')) {
+          message = 'Limite de requêtes atteinte. Réessaie dans quelques secondes.';
+        } else if (errMsg.isNotEmpty) {
+          message = errMsg;
+        }
+      } catch (_) {}
+      throw Exception(message);
     }
 
     final data = jsonDecode(utf8.decode(response.bodyBytes));
-    return data['content'][0]['text'] as String;
+    return data['choices'][0]['message']['content'] as String;
   }
 
   String _buildContexte(
@@ -65,7 +83,8 @@ Sois encourageant même quand la situation est difficile.''',
           fixes += t.montant;
         case TransactionType.depenseVariable:
           variables += t.montant;
-          categories[t.categorie.label] = (categories[t.categorie.label] ?? 0) + t.montant;
+          categories[t.categorie.label] =
+              (categories[t.categorie.label] ?? 0) + t.montant;
         case TransactionType.epargne:
           epargne += t.montant;
       }
@@ -79,17 +98,30 @@ Sois encourageant même quand la situation est difficile.''',
     sb.writeln('Situation professionnelle : ${profile.typeContrat.label}');
     sb.writeln('Logement : ${profile.situationLogement.label}');
     if (profile.loyerMensuel != null) {
-      sb.writeln('Loyer mensuel : ${profile.loyerMensuel!.toStringAsFixed(2)} €');
+      sb.writeln(
+          'Loyer mensuel : ${profile.loyerMensuel!.toStringAsFixed(2)} €');
     }
-    sb.writeln('Objectif épargne mensuel : ${profile.objectifEpargne.toStringAsFixed(2)} €');
+    sb.writeln(
+        'Objectif épargne mensuel : ${profile.objectifEpargne.toStringAsFixed(2)} €');
+    if (profile.objectifPatrimoine > 0) {
+      sb.writeln(
+          'Objectif patrimoine : ${profile.objectifPatrimoine.toStringAsFixed(0)} €');
+      if (profile.dateObjectifPatrimoine != null) {
+        final d = profile.dateObjectifPatrimoine!;
+        sb.writeln(
+            'Date objectif : ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}');
+      }
+    }
 
     sb.writeln('\n=== DONNÉES FINANCIÈRES ($mois) ===');
     sb.writeln('Revenus totaux : ${revenus.toStringAsFixed(2)} €');
     sb.writeln('Dépenses fixes : ${fixes.toStringAsFixed(2)} €');
     sb.writeln('Dépenses variables : ${variables.toStringAsFixed(2)} €');
     sb.writeln('Épargne réalisée : ${epargne.toStringAsFixed(2)} €');
-    sb.writeln('Coût abonnements actifs : ${coutAbos.toStringAsFixed(2)} €/mois');
-    sb.writeln('Solde : ${(revenus - fixes - variables - epargne).toStringAsFixed(2)} €');
+    sb.writeln(
+        'Coût abonnements actifs : ${coutAbos.toStringAsFixed(2)} €/mois');
+    sb.writeln(
+        'Solde : ${(revenus - fixes - variables - epargne).toStringAsFixed(2)} €');
 
     if (categories.isNotEmpty) {
       sb.writeln('\n=== RÉPARTITION DÉPENSES VARIABLES ===');
@@ -101,7 +133,8 @@ Sois encourageant même quand la situation est difficile.''',
     if (abosActifs.isNotEmpty) {
       sb.writeln('\n=== ABONNEMENTS ACTIFS (${abosActifs.length}) ===');
       for (final a in abosActifs) {
-        sb.writeln('${a.nom} : ${a.montantMensuel.toStringAsFixed(2)} €/mois (${a.frequence.label})');
+        sb.writeln(
+            '${a.nom} : ${a.montantMensuel.toStringAsFixed(2)} €/mois (${a.frequence.label})');
       }
     }
 

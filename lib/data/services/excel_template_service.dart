@@ -17,6 +17,7 @@ class ExcelTemplateService {
     }
 
     _buildGuideSheet(excel);
+    _buildProfilSheet(excel);
     _buildTransactionsSheet(excel);
     _buildAbonnementsSheet(excel);
     _buildComptesSheet(excel);
@@ -89,6 +90,7 @@ class ExcelTemplateService {
         .cellStyle = CellStyle(bold: true);
 
     final feuilles = [
+      ('Profil', 'Votre situation, revenus récurrents, charges fixes et objectifs d\'épargne'),
       ('Transactions', 'Vos revenus, dépenses fixes/variables et virements épargne'),
       ('Abonnements', 'Vos abonnements récurrents (streaming, assurances, etc.)'),
       ('Comptes_Epargne',
@@ -120,6 +122,108 @@ class ExcelTemplateService {
 
     s.setColumnWidth(0, 50);
     s.setColumnWidth(1, 60);
+  }
+
+  // ── Feuille : Profil ───────────────────────────────────────────────────────
+
+  static void _buildProfilSheet(Excel excel) {
+    final s = excel['Profil'];
+
+    // ── En-tête ──
+    _cell(s, 0, 0, 'BudgetPro — Profil financier');
+    s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+        .cellStyle = CellStyle(bold: true, fontSize: 13);
+
+    _cell(s, 0, 1,
+        'Remplissez cette feuille pour configurer votre profil lors de l\'import.');
+
+    // ── Infos de base ──
+    _header(s, 0, 3, 'Champ');
+    _header(s, 1, 3, 'Valeur');
+    _header(s, 2, 3, 'Valeurs autorisées');
+
+    final infos = [
+      ('type_contrat', 'cdi',
+          'cdi | cdd | alternant | freelance | etudiant | sansEmploi | retraite'),
+      ('situation_logement', 'heberge',
+          'proprietaire | locataire | heberge'),
+      ('loyer_mensuel', '',
+          'Montant en € si locataire, laisser vide sinon'),
+      ('objectif_epargne', '0',
+          '0 = calcul auto selon statut, sinon montant mensuel en €'),
+      ('rappel_jours_avant', '3',
+          'Nombre de jours avant renouvellement abonnement'),
+      ('objectif_patrimoine', '0',
+          'Objectif de patrimoine total en € (0 = non défini)'),
+      ('date_objectif_patrimoine', '',
+          'Date limite pour atteindre l\'objectif — JJ/MM/AAAA (optionnel)'),
+    ];
+    for (var i = 0; i < infos.length; i++) {
+      _cell(s, 0, 4 + i, infos[i].$1);
+      s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4 + i))
+          .cellStyle = CellStyle(bold: true);
+      _cell(s, 1, 4 + i, infos[i].$2);
+      _comment(s, 2, 4 + i, infos[i].$3);
+    }
+    // infos finit à la ligne 10 (4 + 6) — ligne 11 est vide (séparateur)
+
+    // ── Sources de revenus (ligne 12) ──
+    _cell(s, 0, 12, 'SOURCES_REVENUS');
+    s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 12))
+        .cellStyle = CellStyle(bold: true, italic: true);
+    _comment(s, 1, 12,
+        'Listez ici tous vos revenus récurrents mensuels');
+
+    _header(s, 0, 13, 'label');
+    _header(s, 1, 13, 'montant');
+    _header(s, 2, 13, 'jour_du_mois');
+
+    _comment(s, 0, 14, 'Libellé libre (ex: Salaire net)');
+    _comment(s, 1, 14, 'Montant mensuel en €');
+    _comment(s, 2, 14, 'Jour du mois 1–31 (ex: 25 = le 25 de chaque mois)');
+
+    final srcExemples = [
+      ['Salaire net', '2500.00', '25'],
+      ['Allocation APL', '180.00', '5'],
+      ['Mission freelance', '800.00', '1'],
+    ];
+    for (var r = 0; r < srcExemples.length; r++) {
+      for (var c = 0; c < srcExemples[r].length; c++) {
+        _cell(s, c, 15 + r, srcExemples[r][c]);
+      }
+    }
+    // exemples lignes 15–17, ligne 18 vide (séparateur)
+
+    // ── Charges fixes (ligne 19) ──
+    _cell(s, 0, 19, 'CHARGES_FIXES');
+    s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 19))
+        .cellStyle = CellStyle(bold: true, italic: true);
+    _comment(s, 1, 19,
+        'Dépenses récurrentes hors loyer (géré dans loyer_mensuel)');
+
+    _header(s, 0, 20, 'label');
+    _header(s, 1, 20, 'montant');
+    _header(s, 2, 20, 'jour_du_mois');
+
+    _comment(s, 0, 21, 'Libellé libre (ex: Électricité)');
+    _comment(s, 1, 21, 'Montant mensuel en €');
+    _comment(s, 2, 21, 'Jour du mois 1–31');
+
+    final chgExemples = [
+      ['Électricité', '85.00', '10'],
+      ['Internet Fibre', '35.00', '15'],
+      ['Virement épargne papa', '200.00', '1'],
+      ['Assurance auto', '62.00', '5'],
+    ];
+    for (var r = 0; r < chgExemples.length; r++) {
+      for (var c = 0; c < chgExemples[r].length; c++) {
+        _cell(s, c, 22 + r, chgExemples[r][c]);
+      }
+    }
+
+    s.setColumnWidth(0, 30);
+    s.setColumnWidth(1, 18);
+    s.setColumnWidth(2, 56);
   }
 
   // ── Feuille : Transactions ──────────────────────────────────────────────────

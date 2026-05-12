@@ -1,3 +1,4 @@
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show ConflictAlgorithm;
 import '../../core/database/database_helper.dart';
 import '../../domain/entities/transaction.dart';
 
@@ -19,6 +20,17 @@ class TransactionsRepository {
   Future<void> insert(Transaction t) async {
     final db = await DatabaseHelper.database;
     await db.insert('transactions', t.toMap());
+  }
+
+  /// Insère uniquement si l'id n'existe pas déjà (pour les entrées récurrentes).
+  Future<bool> insertOrIgnore(Transaction t) async {
+    final db = await DatabaseHelper.database;
+    final affected = await db.insert(
+      'transactions',
+      t.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    return affected > 0;
   }
 
   Future<void> update(Transaction t) async {

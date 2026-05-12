@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/compte.dart';
+import '../../domain/entities/user_profile.dart';
 import '../../features/comptes/comptes_provider.dart';
+import '../../features/profile/profile_provider.dart';
 import '../shared/currency_text.dart';
 import 'add_compte_sheet.dart';
 
@@ -15,6 +17,7 @@ class ComptesPage extends ConsumerWidget {
     final patrimoine = ref.watch(patrimoineTotal);
     final interets = ref.watch(interetsEstimesAnnuels);
     final parCategorie = ref.watch(totalParCategorieProvider);
+    final profile = ref.watch(profileProvider).value;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -40,6 +43,20 @@ class ComptesPage extends ConsumerWidget {
               ),
             ),
           ),
+
+          // Objectif patrimoine (si configuré)
+          if (profile != null &&
+              profile.objectifPatrimoine > 0 &&
+              profile.dateObjectifPatrimoine != null)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: _ObjectifPatrimoineCard(
+                  patrimoineActuel: patrimoine,
+                  profile: profile,
+                ),
+              ),
+            ),
 
           // Liste des comptes par catégorie
           comptesAsync.when(
@@ -478,6 +495,292 @@ class _CompteTile extends ConsumerWidget {
       ref.read(comptesProvider.notifier).supprimer(compte.id);
     }
   }
+}
+
+// ── Carte objectif patrimoine ──────────────────────────────────────────────────
+
+class _ObjectifPatrimoineCard extends StatelessWidget {
+  final double patrimoineActuel;
+  final UserProfile profile;
+
+  const _ObjectifPatrimoineCard({
+    required this.patrimoineActuel,
+    required this.profile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final cible = profile.objectifPatrimoine;
+    final dateEcheance = profile.dateObjectifPatrimoine!;
+    final now = DateTime.now();
+
+    // Calculs
+    final manque = (cible - patrimoineActuel).clamp(0.0, double.infinity);
+    final progress = cible > 0 ? (patrimoineActuel / cible).clamp(0.0, 1.0) : 0.0;
+    final moisRestants = _moisEntre(now, dateEcheance);
+    final mensualite = moisRestants > 0 ? manque / moisRestants : 0.0;
+    final dejaAtteint = patrimoineActuel >= cible;
+
+    // Faisabilité
+    final capaciteEpargne = profile.objectifEpargneEffectif;
+    final revenu = profile.revenuMensuelTotal;
+    final feasibility = dejaAtteint
+        ? _Feasibility.atteint
+        : moisRestants <= 0
+            ? _Feasibility.depasse
+            : mensualite <= capaciteEpargne
+                ? _Feasibility.realisable
+                : mensualite <= revenu * 0.4
+                    ? _Feasibility.ambitieux
+                    : mensualite <= revenu * 0.7
+                        ? _Feasibility.tresAmbitieux
+                        : _Feasibility.horsPortee;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: isDark ? cs.surfaceContainerHigh : cs.surface,
+        border: Border.all(
+          color: feasibility.color.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── En-tête ──
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: feasibility.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.emoji_events_rounded,
+                      size: 18, color: feasibility.color),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Objectif patrimoine',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'Atteindre ${formatCurrencyCompact(cible)} d\'ici le ${_fmtDate(dateEcheance)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.onSurface.withValues(alpha: 0.5),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Badge faisabilité
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: feasibility.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: feasibility.color.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    feasibility.label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: feasibility.color,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // ── Chiffres clés ──
+            Row(
+              children: [
+                _Kpi(
+                  label: 'Actuel',
+                  value: formatCurrencyCompact(patrimoineActuel),
+                  color: AppColors.savings,
+                ),
+                const SizedBox(width: 16),
+                _Kpi(
+                  label: 'Manque',
+                  value: dejaAtteint ? '0 €' : '−${formatCurrencyCompact(manque)}',
+                  color: dejaAtteint ? AppColors.excellent : AppColors.expense,
+                ),
+                const SizedBox(width: 16),
+                _Kpi(
+                  label: moisRestants > 0 ? '$moisRestants mois' : 'Échu',
+                  value: moisRestants > 0
+                      ? '${formatCurrencyCompact(mensualite)}/mois'
+                      : '—',
+                  color: feasibility.color,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // ── Barre de progression ──
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: cs.surfaceContainerHighest,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(feasibility.color),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  '${(progress * 100).toStringAsFixed(1)} % atteint',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: cs.onSurface.withValues(alpha: 0.5),
+                      ),
+                ),
+                const Spacer(),
+                Text(
+                  formatCurrencyCompact(cible),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: cs.onSurface.withValues(alpha: 0.4),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // ── Conseil ──
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: feasibility.color.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                feasibility.conseil(mensualite, capaciteEpargne, moisRestants),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurface.withValues(alpha: 0.75),
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static int _moisEntre(DateTime from, DateTime to) {
+    return (to.year - from.year) * 12 + (to.month - from.month);
+  }
+
+  static String _fmtDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+
+// ── KPI widget ────────────────────────────────────────────────────────────────
+
+class _Kpi extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _Kpi({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.45),
+                )),
+        const SizedBox(height: 2),
+        Text(value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                )),
+      ],
+    );
+  }
+}
+
+// ── Faisabilité ───────────────────────────────────────────────────────────────
+
+enum _Feasibility { atteint, realisable, ambitieux, tresAmbitieux, horsPortee, depasse }
+
+extension _FeasibilityExt on _Feasibility {
+  String get label => switch (this) {
+        _Feasibility.atteint => '🎉 Atteint !',
+        _Feasibility.realisable => 'Réalisable',
+        _Feasibility.ambitieux => 'Ambitieux',
+        _Feasibility.tresAmbitieux => 'Très ambitieux',
+        _Feasibility.horsPortee => 'Hors de portée',
+        _Feasibility.depasse => 'Échu',
+      };
+
+  Color get color => switch (this) {
+        _Feasibility.atteint => AppColors.excellent,
+        _Feasibility.realisable => AppColors.excellent,
+        _Feasibility.ambitieux => AppColors.balance,
+        _Feasibility.tresAmbitieux => AppColors.warning,
+        _Feasibility.horsPortee => AppColors.expense,
+        _Feasibility.depasse => const Color(0xFF9CA3AF),
+      };
+
+  String conseil(double mensualite, double capacite, int moisRestants) =>
+      switch (this) {
+        _Feasibility.atteint =>
+          'Félicitations ! Vous avez déjà atteint votre objectif patrimoine. Pensez à en définir un nouveau !',
+        _Feasibility.realisable =>
+          'Votre objectif est parfaitement réalisable avec votre capacité d\'épargne actuelle (${formatCurrencyCompact(capacite)}/mois). Continuez comme ça !',
+        _Feasibility.ambitieux =>
+          'Il vous faut ${formatCurrencyCompact(mensualite)}/mois, légèrement au-dessus de votre objectif d\'épargne (${formatCurrencyCompact(capacite)}/mois). Réduisez quelques dépenses variables.',
+        _Feasibility.tresAmbitieux =>
+          'Effort important requis : ${formatCurrencyCompact(mensualite)}/mois. Envisagez d\'allonger l\'échéance ou de développer vos revenus.',
+        _Feasibility.horsPortee =>
+          'Avec un revenu de base, cet objectif dans $moisRestants mois demanderait ${formatCurrencyCompact(mensualite)}/mois. Repoussez la date d\'échéance pour le rendre atteignable.',
+        _Feasibility.depasse =>
+          'La date d\'échéance est dépassée. Mettez à jour votre objectif dans les Paramètres.',
+      };
+}
+
+String formatCurrencyCompact(double v) {
+  if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)} M€';
+  if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)} k€';
+  return '${v.toStringAsFixed(0)} €';
 }
 
 class _EmptyComptes extends StatelessWidget {

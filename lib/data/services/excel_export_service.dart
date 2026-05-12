@@ -7,7 +7,9 @@ import 'package:path/path.dart' as p;
 import '../../domain/entities/abonnement.dart';
 import '../../domain/entities/compte.dart';
 import '../../domain/entities/transaction.dart';
+import '../../domain/entities/user_profile.dart';
 import '../repositories/compte_repository.dart';
+import '../repositories/profile_repository.dart';
 import '../repositories/transactions_repository.dart';
 import '../repositories/abonnements_repository.dart';
 
@@ -21,6 +23,7 @@ class ExcelExportService {
     final transactions = await TransactionsRepository().getAll();
     final abonnements = await AbonnementsRepository().getAll();
     final comptes = await CompteRepository().getAll();
+    final profile = await ProfileRepository().get();
 
     final excel = Excel.createExcel();
     if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
@@ -29,6 +32,7 @@ class ExcelExportService {
     _buildTransactionsSheet(excel, transactions);
     _buildAbonnementsSheet(excel, abonnements);
     _buildComptesSheet(excel, comptes);
+    _buildProfilSheet(excel, profile);
 
     final bytes = excel.encode();
     if (bytes == null) throw Exception('Échec de la génération du fichier');
@@ -173,5 +177,84 @@ class ExcelExportService {
     s.setColumnWidth(3, 14);
     s.setColumnWidth(4, 22);
     s.setColumnWidth(5, 16);
+  }
+
+  // ── Profil ────────────────────────────────────────────────────────────────
+
+  static void _buildProfilSheet(Excel excel, UserProfile? profile) {
+    final s = excel['Profil'];
+    if (profile == null) {
+      _c(s, 0, 0, 'Aucun profil configuré');
+      return;
+    }
+
+    // ── Informations de base ──
+    _h(s, 0, 0, 'Champ');
+    _h(s, 1, 0, 'Valeur');
+
+    _c(s, 0, 1, 'type_contrat');
+    _c(s, 1, 1, profile.typeContrat.name);
+
+    _c(s, 0, 2, 'situation_logement');
+    _c(s, 1, 2, profile.situationLogement.name);
+
+    _c(s, 0, 3, 'loyer_mensuel');
+    _c(s, 1, 3, profile.loyerMensuel != null
+        ? profile.loyerMensuel!.toStringAsFixed(2)
+        : '');
+
+    _c(s, 0, 4, 'objectif_epargne');
+    _c(s, 1, 4, profile.objectifEpargne.toStringAsFixed(2));
+
+    _c(s, 0, 5, 'rappel_jours_avant');
+    _c(s, 1, 5, '${profile.rappelJoursAvant}');
+
+    _c(s, 0, 6, 'objectif_patrimoine');
+    _c(s, 1, 6, profile.objectifPatrimoine > 0
+        ? profile.objectifPatrimoine.toStringAsFixed(2)
+        : '');
+
+    _c(s, 0, 7, 'date_objectif_patrimoine');
+    if (profile.dateObjectifPatrimoine != null) {
+      final d = profile.dateObjectifPatrimoine!;
+      _c(s, 1, 7,
+          '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}');
+    }
+
+    // ── Sources de revenus (à partir de la ligne 9) ──
+    const srcStart = 9;
+    _c(s, 0, srcStart, 'SOURCES_REVENUS');
+    s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: srcStart))
+        .cellStyle = CellStyle(bold: true, italic: true);
+    _h(s, 0, srcStart + 1, 'label');
+    _h(s, 1, srcStart + 1, 'montant');
+    _h(s, 2, srcStart + 1, 'jour_du_mois');
+
+    for (var i = 0; i < profile.sources.length; i++) {
+      final src = profile.sources[i];
+      _c(s, 0, srcStart + 2 + i, src.label);
+      _c(s, 1, srcStart + 2 + i, src.montant.toStringAsFixed(2));
+      _c(s, 2, srcStart + 2 + i, '${src.jour}');
+    }
+
+    // ── Charges fixes ──
+    final chargesStart = srcStart + 2 + profile.sources.length + 1;
+    _c(s, 0, chargesStart, 'CHARGES_FIXES');
+    s.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: chargesStart))
+        .cellStyle = CellStyle(bold: true, italic: true);
+    _h(s, 0, chargesStart + 1, 'label');
+    _h(s, 1, chargesStart + 1, 'montant');
+    _h(s, 2, chargesStart + 1, 'jour_du_mois');
+
+    for (var i = 0; i < profile.chargesFixes.length; i++) {
+      final c = profile.chargesFixes[i];
+      _c(s, 0, chargesStart + 2 + i, c.label);
+      _c(s, 1, chargesStart + 2 + i, c.montant.toStringAsFixed(2));
+      _c(s, 2, chargesStart + 2 + i, '${c.jour}');
+    }
+
+    s.setColumnWidth(0, 28);
+    s.setColumnWidth(1, 16);
+    s.setColumnWidth(2, 16);
   }
 }

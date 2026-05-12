@@ -83,6 +83,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     if (picked != null) setState(() => _date = picked);
   }
 
+  Future<void> _delete() async {
+    final t = widget.transaction!;
+    Navigator.of(context).pop();
+    // Petite pause pour laisser le sheet se fermer proprement avant de supprimer
+    await Future.delayed(const Duration(milliseconds: 150));
+    ref.read(transactionsMoisProvider(t.mois).notifier).supprimer(t.id);
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     final mois = _isEdit
@@ -125,7 +133,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Titre + sélecteur de type
+              // Titre + sélecteur de type + bouton supprimer
               Row(
                 children: [
                   Expanded(
@@ -138,6 +146,13 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                     ),
                   ),
                   if (_isEdit) ...[
+                    // Bouton supprimer
+                    IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          color: Theme.of(context).colorScheme.error),
+                      tooltip: 'Supprimer cette transaction',
+                      onPressed: _delete,
+                    ),
                     // Sélecteur de type en mode édition
                     DropdownButton<TransactionType>(
                       value: _type,
