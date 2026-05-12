@@ -172,12 +172,12 @@ class _ExportDataTileState extends State<_ExportDataTile> {
 
 // ── Import données ─────────────────────────────────────────────────────────────
 
-class _ImportDataTile extends StatefulWidget {
+class _ImportDataTile extends ConsumerStatefulWidget {
   @override
-  State<_ImportDataTile> createState() => _ImportDataTileState();
+  ConsumerState<_ImportDataTile> createState() => _ImportDataTileState();
 }
 
-class _ImportDataTileState extends State<_ImportDataTile> {
+class _ImportDataTileState extends ConsumerState<_ImportDataTile> {
   bool _loading = false;
 
   Future<void> _import() async {
@@ -193,20 +193,28 @@ class _ImportDataTileState extends State<_ImportDataTile> {
       final importResult = await ExcelImportService.importFromFile(
           result.files.single.path!);
 
-      if (mounted) {
-        final msg = '${importResult.transactions} transactions, '
-            '${importResult.abonnements} abonnements, '
-            '${importResult.comptes} comptes importés.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(importResult.hasErrors
-                ? '$msg\n⚠️ ${importResult.errors.first}'
-                : '✅ $msg'),
-            duration: const Duration(seconds: 7),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (!mounted) return;
+
+      // ── Rafraîchir tous les providers pour refléter les données importées ──
+      ref.invalidate(comptesProvider);
+      ref.invalidate(profileProvider);
+      ref.invalidate(abonnementsProvider);
+      ref.invalidate(transactionsMoisProvider);
+      ref.invalidate(moisDisponiblesProvider);
+
+      final msg = '${importResult.transactions} transactions, '
+          '${importResult.abonnements} abonnements, '
+          '${importResult.comptes} comptes importés'
+          '${importResult.profilImporte ? ', profil' : ''}.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(importResult.hasErrors
+              ? '$msg\n⚠️ ${importResult.errors.first}'
+              : '✅ $msg'),
+          duration: const Duration(seconds: 7),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
